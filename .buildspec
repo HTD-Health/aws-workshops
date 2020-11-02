@@ -1,0 +1,17 @@
+version: 0.2
+
+phases:
+    install:
+        runtime-versions:
+            nodejs: 10.x
+    pre_build:
+        commands:
+            - npm i
+    build:
+        commands:
+            - npm run build
+artifacts:
+    files:
+        - "/src/frontend/*"
+    discard-paths: no
+    base-directory: build
