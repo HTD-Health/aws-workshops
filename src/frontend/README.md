@@ -1,3 +1,6 @@
+If `REACT_APP_API_URL` env variable is passed it will be used in the local instance and injected into the build artifact.
+Otherwise API calls will be mocked.
+
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts

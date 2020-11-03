@@ -2,47 +2,50 @@ import MockAdapter from "axios-mock-adapter"
 import axios from "axios"
 import useAxios, {configure} from "axios-hooks";
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const api = axios.create({
-    baseURL: process.env.API_URL,
+    baseURL: API_URL,
     timeout: 1000,
 });
 configure({axios: api})
 
-// ========== Remove this! =============
-let todos = []
-const mock = new MockAdapter(api, { delayResponse: 100 });
+// Mock API if no URL is passed
+if (!API_URL) {
+    let todos = []
+    const mock = new MockAdapter(api, { delayResponse: 100 });
 
-mock.onGet("/todos").reply(() => {
-    return [200, todos]
-});
+    mock.onGet("/todos").reply(() => {
+        return [200, todos]
+    });
 
-mock.onPost("/todos").reply(config => {
-    const todo = {
-        ...JSON.parse(config.data),
-        id: todos.length,
-    }
-
-    todos = [ todo, ...todos ]
-    return [200, todo]
-})
-
-mock.onDelete(/\/todos\/\d+/).reply(config => {
-    todos = todos.filter(todo => todo.id !== config.id)
-    return [204, {}]
-})
-
-mock.onPut('/todos').reply(config => {
-    const updatedTodo = JSON.parse(config.data)
-
-    todos = todos.map(todo => {
-        if (todo.id === updatedTodo.id) {
-            return JSON.parse(config.data)
+    mock.onPost("/todos").reply(config => {
+        const todo = {
+            ...JSON.parse(config.data),
+            id: todos.length,
         }
-        return todo
+
+        todos = [ todo, ...todos ]
+        return [200, todo]
     })
-    return [204, {}]
-})
-// ========== End of Remove this! =============
+
+    mock.onDelete(/\/todos\/\d+/).reply(config => {
+        todos = todos.filter(todo => todo.id !== config.id)
+        return [204, {}]
+    })
+
+    mock.onPut('/todos').reply(config => {
+        const updatedTodo = JSON.parse(config.data)
+
+        todos = todos.map(todo => {
+            if (todo.id === updatedTodo.id) {
+                return JSON.parse(config.data)
+            }
+            return todo
+        })
+        return [204, {}]
+    })
+}
 
 // Hooks
 export const useTodos = () => useAxios("/todos")
