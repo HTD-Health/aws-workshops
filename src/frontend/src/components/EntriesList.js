@@ -24,7 +24,7 @@ export const EntriesList = ({entries, onChange, onRemove}) => (
                         disabled={entry.id === undefined}
                     />
                 </ListItemIcon>
-                <ListItemText>
+                <ListItemText data-testid={entry.id}>
                     {entry.completed ? (
                         <strike>{entry.body}</strike>
                     ) : (

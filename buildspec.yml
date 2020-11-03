@@ -10,7 +10,10 @@ phases:
             - npm i
     build:
         commands:
-            - npm run build
+            - REACT_APP_API_URL=$API_URL npm run build
+    post_build:
+        commands:
+            - CI=true npm test
 artifacts:
     files:
         - "**/*"
