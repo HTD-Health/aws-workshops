@@ -1,0 +1,21 @@
+version: 0.2
+
+phases:
+    install:
+        runtime-versions:
+            nodejs: 10.x
+    pre_build:
+        commands:
+            - cd src/frontend
+            - npm i
+    build:
+        commands:
+            - REACT_APP_API_URL=$API_URL npm run build
+    post_build:
+        commands:
+            - CI=true npm test
+artifacts:
+    files:
+        - "**/*"
+    discard-paths: no
+    base-directory: 'src/frontend/build'
