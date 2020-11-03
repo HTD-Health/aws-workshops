@@ -1,0 +1,167 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+    ApiUrl:
+        Default: ''
+        Type: String
+      
+Resources:
+    AppBucket:
+        Type: 'AWS::S3::Bucket'
+        DeletionPolicy: Delete
+        Properties:
+          BucketName: !Sub "workshops-storage"
+          WebsiteConfiguration:
+            IndexDocument: index.html
+    MyStaticSiteBucketPolicy:
+        Type: 'AWS::S3::BucketPolicy'
+        Properties:
+            Bucket: !Ref AppBucket
+            PolicyDocument:
+                Statement:
+                    Action:
+                        - 's3:GetObject'
+                    Effect: Allow
+                    Resource:
+                        'Fn::Join': [
+                            '', [
+                                'arn:aws:s3:::',
+                                {
+                                    Ref: AppBucket
+                                },
+                                '/*'
+
+                            ]
+                        ]
+                    Principal: "*"
+    AppBuild:
+        Type: AWS::CodeBuild::Project
+        Properties:
+          ServiceRole: !GetAtt AppBuildRole.Arn
+          Name: !Sub "${AWS::StackName}-AppBuild"
+          Artifacts:
+            Type: CODEPIPELINE
+          Environment:
+            Type: LINUX_CONTAINER
+            ComputeType: BUILD_GENERAL1_SMALL
+            Image: aws/codebuild/amazonlinux2-x86_64-standard:2.0
+            EnvironmentVariables:
+              - Name: API_URL
+                Value: !Sub "${ApiUrl}"
+          Source:
+            Type: CODEPIPELINE
+            BuildSpec: "buildspec.yml"
+          TimeoutInMinutes: 10
+          Cache:
+            Type: LOCAL
+            Modes:
+              - LOCAL_CUSTOM_CACHE
+    AppPipeline:
+        Type: AWS::CodePipeline::Pipeline
+        Properties:
+          RoleArn: !GetAtt AppPipelineRole.Arn
+          ArtifactStore:
+            Type: S3
+            Location: !Ref ArtifactsStoreS3
+          Stages:
+            - Name: Source
+              Actions:
+                - Name: SourceAction
+                  ActionTypeId:
+                    Category: Source
+                    Owner: ThirdParty
+                    Version: "1"
+                    Provider: GitHub
+                  OutputArtifacts:
+                    - Name: SourceOutput
+                  Configuration:
+                    Owner: "{{resolve:secretsmanager:workshops:SecretString:SourceRepoOwner}}"
+                    Repo: "{{resolve:secretsmanager:workshops:SecretString:SourceRepoName}}"
+                    Branch: main
+                    OAuthToken: "{{resolve:secretsmanager:workshops:SecretString:GitHubPersonalAccessToken}}"
+                    PollForSourceChanges: "false"
+                  RunOrder: 1
+            - Name: Build
+              Actions:
+                - Name: BuildAction
+                  InputArtifacts:
+                    - Name: SourceOutput
+                  ActionTypeId:
+                    Category: Build
+                    Owner: AWS
+                    Version: "1"
+                    Provider: CodeBuild
+                  Configuration:
+                    ProjectName: !Sub "${AWS::StackName}-AppBuild"
+                  OutputArtifacts:
+                    - Name: BuildOutput
+                  RunOrder: 1
+            - Name: Deploy
+              Actions:
+                - Name: DeployStaticWebsite
+                  InputArtifacts:
+                    - Name: BuildOutput
+                  ActionTypeId:
+                    Category: Deploy
+                    Owner: AWS
+                    Version: "1"
+                    Provider: S3
+                  Configuration:
+                    BucketName: !Ref AppBucket
+                    Extract: true
+                  RunOrder: 1
+    AppPipelineRole:
+        Type: AWS::IAM::Role
+        Properties:
+          AssumeRolePolicyDocument:
+            Statement:
+              - Action: ["sts:AssumeRole"]
+                Effect: Allow
+                Principal:
+                  Service: [codepipeline.amazonaws.com]
+            Version: "2012-10-17"
+          Path: /
+          Policies:
+            - PolicyName: AppPipelineAccess
+              PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                  - Action:
+                      - "codebuild:StartBuild"
+                      - "codebuild:BatchGetBuilds"
+                      - "s3:*"
+                      - "iam:GetRole"
+                      - "iam:PassRole"
+                      - "sns:Publish"
+                      - "lambda:InvokeFunction"
+                    Effect: Allow
+                    Resource: "*"
+    AppBuildRole:
+        Type: AWS::IAM::Role
+        Properties:
+          AssumeRolePolicyDocument:
+            Statement:
+              - Action: ["sts:AssumeRole"]
+                Effect: Allow
+                Principal:
+                  Service: [codebuild.amazonaws.com]
+            Version: "2012-10-17"
+          Path: /
+          Policies:
+            - PolicyName: CodeBuildAccess
+              PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                  - Action:
+                      - "logs:CreateLogStream"
+                      - "logs:PutLogEvents"
+                      - "codebuild:StartBuild"
+                      - "logs:CreateLogGroup"
+                      - "ssm:GetParameters"
+                      - "s3:*"
+                    Effect: Allow
+                    Resource: "*"
+    ArtifactsStoreS3:
+        Type: AWS::S3::Bucket
+        DeletionPolicy: Delete
+        Properties:
+          BucketName: !Sub "${AWS::StackName}-app-artifacts-store"
